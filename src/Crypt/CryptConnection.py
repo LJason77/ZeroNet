@@ -11,11 +11,13 @@ from util import helper
 
 class CryptConnectionManager:
     def __init__(self):
-        # OpenSSL params
         if sys.platform.startswith("win"):
             self.openssl_bin = "tools\\openssl\\openssl.exe"
+        elif config.dist_type.startswith("bundle_linux"):
+            self.openssl_bin = "../runtime/bin/openssl"
         else:
             self.openssl_bin = "openssl"
+
         self.openssl_env = {
             "OPENSSL_CONF": "src/lib/openssl/openssl.cnf",
             "RANDFILE": config.data_dir + "/openssl-rand.tmp"
@@ -137,7 +139,7 @@ class CryptConnectionManager:
             cmd, shell=True, stderr=subprocess.STDOUT,
             stdout=subprocess.PIPE, env=self.openssl_env
         )
-        back = proc.stdout.read().strip().decode().replace("\r", "")
+        back = proc.stdout.read().strip().decode(errors="replace").replace("\r", "")
         proc.wait()
 
         if not (os.path.isfile(self.cacert_pem) and os.path.isfile(self.cakey_pem)):
@@ -160,7 +162,7 @@ class CryptConnectionManager:
             cmd, shell=True, stderr=subprocess.STDOUT,
             stdout=subprocess.PIPE, env=self.openssl_env
         )
-        back = proc.stdout.read().strip().decode().replace("\r", "")
+        back = proc.stdout.read().strip().decode(errors="replace").replace("\r", "")
         proc.wait()
         self.log.debug("Running: %s\n%s" % (cmd, back))
 
@@ -179,7 +181,7 @@ class CryptConnectionManager:
             cmd, shell=True, stderr=subprocess.STDOUT,
             stdout=subprocess.PIPE, env=self.openssl_env
         )
-        back = proc.stdout.read().strip().decode().replace("\r", "")
+        back = proc.stdout.read().strip().decode(errors="replace").replace("\r", "")
         proc.wait()
         self.log.debug("Running: %s\n%s" % (cmd, back))
 
