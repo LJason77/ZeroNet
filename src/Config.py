@@ -13,9 +13,10 @@ class Config(object):
 
     def __init__(self, argv):
         self.version = "0.7.1"
-        self.rev = 4221
+        self.rev = 4287
         self.argv = argv
         self.action = None
+        self.test_parser = None
         self.pending_changes = {}
         self.need_restart = False
         self.keys_api_change_allowed = set([
@@ -113,6 +114,8 @@ class Config(object):
 
         # SiteCreate
         action = self.subparsers.add_parser("siteCreate", help='Create a new site')
+        action.register('type', 'bool', self.strToBool)
+        action.add_argument('--use_master_seed', help="Allow created site's private key to be recovered using the master seed in users.json (default: True)", type="bool", choices=[True, False], default=True)
 
         # SiteNeedFile
         action = self.subparsers.add_parser("siteNeedFile", help='Get a file from site')
@@ -201,6 +204,8 @@ class Config(object):
         action = self.subparsers.add_parser("testConnection", help='Testing')
         action = self.subparsers.add_parser("testAnnounce", help='Testing')
 
+        self.test_parser = self.subparsers.add_parser("test", help='Run a test')
+        self.test_parser.add_argument('test_name', help='Test name', nargs="?")
         # Config parameters
         self.parser.add_argument('--verbose', help='More detailed logging', action='store_true')
         self.parser.add_argument('--debug', help='Debug mode', action='store_true')
@@ -275,6 +280,8 @@ class Config(object):
         self.parser.add_argument("--fix_float_decimals", help='Fix content.json modification date float precision on verification',
                                  type='bool', choices=[True, False], default=fix_float_decimals)
         self.parser.add_argument("--db_mode", choices=["speed", "security"], default="speed")
+        self.parser.add_argument('--threads_fs_read', help='Number of threads for file read operations', default=1, type=int)
+        self.parser.add_argument('--threads_fs_write', help='Number of threads for file write operations', default=1, type=int)
         self.parser.add_argument("--download_optional", choices=["manual", "auto"], default="manual")
 
         self.parser.add_argument('--coffeescript_compiler', help='Coffeescript compiler for developing', default=coffeescript,
@@ -354,8 +361,17 @@ class Config(object):
                 valid_parameters.append(arg)
         return valid_parameters + plugin_parameters
 
+    def getParser(self, argv):
+        action = self.getAction(argv)
+        if not action:
+            return self.parser
+        else:
+            return self.subparsers.choices[action]
+
     # Parse arguments from config file and command line
     def parse(self, silent=False, parse_config=True):
+        argv = self.argv[:]  # Copy command line arguments
+        current_parser = self.getParser(argv)
         if silent:  # Don't display messages or quit on unknown parameter
             original_print_message = self.parser._print_message
             original_exit = self.parser.exit
@@ -363,11 +379,10 @@ class Config(object):
             def silencer(parser, function_name):
                 parser.exited = True
                 return None
-            self.parser.exited = False
-            self.parser._print_message = lambda *args, **kwargs: silencer(self.parser, "_print_message")
-            self.parser.exit = lambda *args, **kwargs: silencer(self.parser, "exit")
+            current_parser.exited = False
+            current_parser._print_message = lambda *args, **kwargs: silencer(current_parser, "_print_message")
+            current_parser.exit = lambda *args, **kwargs: silencer(current_parser, "exit")
 
-        argv = self.argv[:]  # Copy command line arguments
         self.parseCommandline(argv, silent)  # Parse argv
         self.setAttributes()
         if parse_config:
@@ -381,10 +396,10 @@ class Config(object):
                 self.ip_local.append(self.fileserver_ip)
 
         if silent:  # Restore original functions
-            if self.parser.exited and self.action == "main":  # Argument parsing halted, don't start ZeroNet with main action
+            if current_parser.exited and self.action == "main":  # Argument parsing halted, don't start ZeroNet with main action
                 self.action = None
-            self.parser._print_message = original_print_message
-            self.parser.exit = original_exit
+            current_parser._print_message = original_print_message
+            current_parser.exit = original_exit
 
         self.loadTrackersFile()
 
@@ -437,6 +452,16 @@ class Config(object):
                     argv = argv[:1] + argv_extend + argv[1:]
         return argv
 
+    # Return command line value of given argument
+    def getCmdlineValue(self, key):
+        if key not in self.argv:
+            return None
+        argv_index = self.argv.index(key)
+        if argv_index == len(self.argv) - 1:  # last arg, test not specified
+            return None
+
+        return self.argv[argv_index + 1]
+
     # Expose arguments as class attributes
     def setAttributes(self):
         # Set attributes from arguments
@@ -455,7 +480,11 @@ class Config(object):
         @PluginManager.acceptPlugins
         class ConfigPlugin(object):
             def __init__(self, config):
+                self.argv = config.argv
                 self.parser = config.parser
+                self.subparsers = config.subparsers
+                self.test_parser = config.test_parser
+                self.getCmdlineValue = config.getCmdlineValue
                 self.createArguments()
 
             def createArguments(self):

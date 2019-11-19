@@ -25,6 +25,13 @@ class SiteManagerPlugin(object):
         super(SiteManagerPlugin, self).load(*args, **kwargs)
         filter_storage = ContentFilterStorage(site_manager=self)
 
+    def add(self, address, *args, **kwargs):
+        if filter_storage.isSiteblocked(address):
+            details = filter_storage.getSiteblockDetails(address)
+            raise Exception("Site blocked: %s" % html.escape(details.get("reason", "unknown reason")))
+        else:
+            return super(SiteManagerPlugin, self).add(address, *args, **kwargs)
+
 
 @PluginManager.registerTo("UiWebsocket")
 class UiWebsocketPlugin(object):
@@ -191,8 +198,8 @@ class UiRequestPlugin(object):
         if self.server.site_manager.get(address):  # Site already exists
             return super(UiRequestPlugin, self).actionWrapper(path, extra_headers)
 
-        if self.server.site_manager.isDomain(address):
-            address = self.server.site_manager.resolveDomain(address)
+        if self.isDomain(address):
+            address = self.resolveDomain(address)
 
         if address:
             address_sha256 = "0x" + hashlib.sha256(address.encode("utf8")).hexdigest()

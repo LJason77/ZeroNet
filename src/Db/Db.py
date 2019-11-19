@@ -89,7 +89,7 @@ class Db(object):
             self.log.debug("Created Db path: %s" % self.db_dir)
         if not os.path.isfile(self.db_path):
             self.log.debug("Db file not exist yet: %s" % self.db_path)
-        self.conn = sqlite3.connect(self.db_path, isolation_level="DEFERRED")
+        self.conn = sqlite3.connect(self.db_path, isolation_level="DEFERRED", check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.set_progress_handler(self.progress, 5000000)
         self.cur = self.getCursor()
@@ -114,13 +114,20 @@ class Db(object):
             self.log.debug("Commit ignored: Progress sleeping")
             return False
 
+        if not self.conn:
+            self.log.debug("Commit ignored: No connection")
+            return False
+
         try:
             s = time.time()
             self.conn.commit()
             self.log.debug("Commited in %.3fs (reason: %s)" % (time.time() - s, reason))
             return True
         except Exception as err:
-            self.log.error("Commit error: %s" % err)
+            if "SQL statements in progress" in str(err):
+                self.log.warning("Commit delayed: %s (reason: %s)" % (Debug.formatException(err), reason))
+            else:
+                self.log.error("Commit error: %s (reason: %s)" % (Debug.formatException(err), reason))
             return False
 
     def insertOrUpdate(self, *args, **kwargs):

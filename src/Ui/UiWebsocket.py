@@ -139,6 +139,8 @@ class UiWebsocket(object):
                 self.cmd("setSiteInfo", site_info)
             elif channel == "serverChanged":
                 server_info = self.formatServerInfo()
+                if len(params) > 0 and params[0]:  # Extra data
+                    server_info.update(params[0])
                 self.cmd("setServerInfo", server_info)
             elif channel == "announcerChanged":
                 site = params[0]
@@ -1103,6 +1105,11 @@ class UiWebsocket(object):
 
     @flag.admin
     @flag.no_multiuser
+    def actionServerErrors(self, to):
+        return self.server.logdb_errors.lines
+
+    @flag.admin
+    @flag.no_multiuser
     def actionServerUpdate(self, to):
         def cbServerUpdate(res):
             self.response(to, res)
@@ -1117,6 +1124,7 @@ class UiWebsocket(object):
 
             import main
             main.update_after_shutdown = True
+            main.restart_after_shutdown = True
             SiteManager.site_manager.save()
             main.file_server.stop()
             main.ui_server.stop()

@@ -599,11 +599,17 @@ class ContentManager(object):
             return False
         elif len(relative_path) > 255:
             return False
+        elif relative_path[0] in (".", "/"):  # Starts with
+            return False
+        elif relative_path[-1] in (".", " "):  # Ends with
+            return False
+        elif re.match(r".*(^|/)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9]|CONOUT\$|CONIN\$)(\.|/|$)", relative_path, re.IGNORECASE):  # Protected on Windows
+            return False
         else:
-            return re.match(r"^[a-z\[\]\(\) A-Z0-9~_@=\.\+-/]+$", relative_path)
+            return re.match(r"^[^\x00-\x1F\"*:<>?\\|]+$", relative_path)
 
     def sanitizePath(self, inner_path):
-        return re.sub("[^a-z\[\]\(\) A-Z0-9_@=\.\+-/]", "", inner_path)
+        return re.sub("[\x00-\x1F\"*:<>?\\|]", "", inner_path)
 
     # Hash files in directory
     def hashFiles(self, dir_inner_path, ignore_pattern=None, optional_pattern=None):

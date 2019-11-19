@@ -38,8 +38,9 @@ def main():
             import update
             print("Updating...")
             update.update()
-            print("Restarting...")
-            restart()
+            if main.restart_after_shutdown:
+                print("Restarting...")
+                restart()
         else:
             print("Shutting down...")
             prepareShutdown()
@@ -84,7 +85,7 @@ def prepareShutdown():
             logger.removeHandler(handler)
 
     import time
-    time.sleep(1)  # Wait files to close
+    time.sleep(1)  # Wait for files to close
 
 def restart():
     args = sys.argv[:]

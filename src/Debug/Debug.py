@@ -26,14 +26,18 @@ def formatException(err=None, format="text"):
     import traceback
     if type(err) == Notify:
         return err
-    elif type(err) == tuple and err[0] is not None:  # Passed trackeback info
+    elif type(err) == tuple and err and err[0] is not None:  # Passed trackeback info
         exc_type, exc_obj, exc_tb = err
         err = None
     else:  # No trackeback info passed, get latest
         exc_type, exc_obj, exc_tb = sys.exc_info()
 
     if not err:
-        err = exc_obj.message
+        if hasattr(err, "message"):
+            err = exc_obj.message
+        else:
+            err = exc_obj
+
     tb = []
     for frame in traceback.extract_tb(exc_tb):
         path, line, function, text = frame
@@ -66,13 +70,16 @@ import gevent
 import time
 
 
+num_block = 0
 def testBlock():
+    global num_block
     logging.debug("Gevent block checker started")
     last_time = time.time()
     while 1:
         time.sleep(1)
         if time.time() - last_time > 1.1:
             logging.debug("Gevent block detected: %s" % (time.time() - last_time - 1))
+            num_block += 1
         last_time = time.time()
 gevent.spawn(testBlock)
 
