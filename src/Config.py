@@ -13,7 +13,7 @@ class Config(object):
 
     def __init__(self, argv):
         self.version = "0.7.1"
-        self.rev = 4287
+        self.rev = 4394
         self.argv = argv
         self.action = None
         self.test_parser = None
@@ -21,9 +21,12 @@ class Config(object):
         self.need_restart = False
         self.keys_api_change_allowed = set([
             "tor", "fileserver_port", "language", "tor_use_bridges", "trackers_proxy", "trackers",
-            "trackers_file", "open_browser", "log_level", "fileserver_ip_type", "ip_external", "offline"
+            "trackers_file", "open_browser", "log_level", "fileserver_ip_type", "ip_external", "offline",
+            "threads_fs_read", "threads_fs_write", "threads_crypt", "threads_db"
         ])
-        self.keys_restart_need = set(["tor", "fileserver_port", "fileserver_ip_type"])
+        self.keys_restart_need = set([
+            "tor", "fileserver_port", "fileserver_ip_type", "threads_fs_read", "threads_fs_write", "threads_crypt", "threads_db"
+        ])
         self.start_dir = self.getStartDir()
 
         self.config_file = self.start_dir + "/zeronet.conf"
@@ -75,11 +78,11 @@ class Config(object):
             "zero://boot3rdez4rzn36x.onion:15441",
             "zero://zero.booth.moe#f36ca555bee6ba216b14d10f38c16f7769ff064e0e37d887603548cc2e64191d:443",  # US/NY
             "udp://tracker.coppersurfer.tk:6969",  # DE
-            "udp://amigacity.xyz:6969",  # US/NY
+            "udp://tracker.zum.bi:6969",  # US/NY
             "udp://104.238.198.186:8000",  # US/LA
             "http://tracker01.loveapp.com:6789/announce",  # Google
             "http://open.acgnxtracker.com:80/announce",  # DE
-            "http://open.trackerlist.xyz:80/announce",  # Cloudflare
+            "http://tracker.bt4g.com:2095/announce",  # Cloudflare
             "zero://2602:ffc5::c5b2:5360:26312"  # US/ATL
         ]
         # Platform specific
@@ -206,6 +209,8 @@ class Config(object):
 
         self.test_parser = self.subparsers.add_parser("test", help='Run a test')
         self.test_parser.add_argument('test_name', help='Test name', nargs="?")
+        # self.test_parser.add_argument('--benchmark', help='Run the tests multiple times to measure the performance', action='store_true')
+
         # Config parameters
         self.parser.add_argument('--verbose', help='More detailed logging', action='store_true')
         self.parser.add_argument('--debug', help='Debug mode', action='store_true')
@@ -280,8 +285,12 @@ class Config(object):
         self.parser.add_argument("--fix_float_decimals", help='Fix content.json modification date float precision on verification',
                                  type='bool', choices=[True, False], default=fix_float_decimals)
         self.parser.add_argument("--db_mode", choices=["speed", "security"], default="speed")
+
         self.parser.add_argument('--threads_fs_read', help='Number of threads for file read operations', default=1, type=int)
         self.parser.add_argument('--threads_fs_write', help='Number of threads for file write operations', default=1, type=int)
+        self.parser.add_argument('--threads_crypt', help='Number of threads for cryptographic operations', default=2, type=int)
+        self.parser.add_argument('--threads_db', help='Number of threads for database operations', default=1, type=int)
+
         self.parser.add_argument("--download_optional", choices=["manual", "auto"], default="manual")
 
         self.parser.add_argument('--coffeescript_compiler', help='Coffeescript compiler for developing', default=coffeescript,

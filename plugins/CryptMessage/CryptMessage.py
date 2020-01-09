@@ -1,10 +1,12 @@
 import hashlib
 import base64
+import binascii
 
 import lib.pybitcointools as btctools
+from util import ThreadPool
+from Crypt import Crypt
 
 ecc_cache = {}
-
 
 def eciesEncrypt(data, pubkey, ephemcurve=None, ciphername='aes-256-cbc'):
     from lib import pyelliptic
@@ -21,6 +23,19 @@ def eciesEncrypt(data, pubkey, ephemcurve=None, ciphername='aes-256-cbc'):
     ciphertext = iv + pubkey + ctx.ciphering(data)
     mac = pyelliptic.hmac_sha256(key_m, ciphertext)
     return key_e, ciphertext + mac
+
+
+@Crypt.thread_pool_crypt.wrap
+def eciesDecryptMulti(encrypted_datas, privatekey):
+    texts = []  # Decoded texts
+    for encrypted_data in encrypted_datas:
+        try:
+            text = eciesDecrypt(encrypted_data, privatekey).decode("utf8")
+            texts.append(text)
+        except:
+            texts.append(None)
+    return texts
+
 
 def eciesDecrypt(encrypted_data, privatekey):
     ecc_key = getEcc(privatekey)

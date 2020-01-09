@@ -25,7 +25,7 @@ class ContentDbPlugin(object):
         self.my_optional_files = {}  # Last 50 site_address/inner_path called by fileWrite (auto-pinning these files)
         self.optional_files = collections.defaultdict(dict)
         self.optional_files_loading = False
-        helper.timer(60 * 5, self.checkOptionalLimit)
+        self.timer_check_optional = helper.timer(60 * 5, self.checkOptionalLimit)
         super(ContentDbPlugin, self).__init__(*args, **kwargs)
 
     def getSchema(self):
@@ -91,7 +91,7 @@ class ContentDbPlugin(object):
         site_ids_reverse = {val: key for key, val in self.site_ids.items()}
         for site_id, stats in site_sizes.items():
             site_address = site_ids_reverse.get(site_id)
-            if not site_address:
+            if not site_address or site_address not in self.sites:
                 self.log.error("Not found site_id: %s" % site_id)
                 continue
             site = self.sites[site_address]
@@ -142,14 +142,14 @@ class ContentDbPlugin(object):
         if not user:
             user = UserManager.user_manager.create()
         auth_address = user.getAuthAddress(site.address)
-        self.execute(
+        res = self.execute(
             "UPDATE file_optional SET is_pinned = 1 WHERE site_id = :site_id AND inner_path LIKE :inner_path",
             {"site_id": site_id, "inner_path": "%%/%s/%%" % auth_address}
         )
 
         self.log.debug(
             "Filled file_optional table for %s in %.3fs (loaded: %s, is_pinned: %s)" %
-            (site.address, time.time() - s, num, self.cur.cursor.rowcount)
+            (site.address, time.time() - s, num, res.rowcount)
         )
         self.filled[site.address] = True
 
