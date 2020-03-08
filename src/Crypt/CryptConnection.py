@@ -11,7 +11,9 @@ from util import helper
 
 class CryptConnectionManager:
     def __init__(self):
-        if sys.platform.startswith("win"):
+        if config.openssl_bin_file:
+            self.openssl_bin = config.openssl_bin_file
+        elif sys.platform.startswith("win"):
             self.openssl_bin = "tools\\openssl\\openssl.exe"
         elif config.dist_type.startswith("bundle_linux"):
             self.openssl_bin = "../runtime/bin/openssl"

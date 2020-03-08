@@ -354,7 +354,7 @@ def ui_websocket(site, user):
             self.result = gevent.event.AsyncResult()
 
         def send(self, data):
-            logging.debug("WsMock: Set result (data: %s)" % data)
+            logging.debug("WsMock: Set result (data: %s) called by %s" % (data, Debug.formatStack()))
             self.result.set(json.loads(data)["result"])
 
         def getResult(self):
@@ -436,7 +436,7 @@ def db(request):
     return db
 
 
-@pytest.fixture(params=["btctools", "openssl", "libsecp256k1"])
+@pytest.fixture(params=["sslcrypto", "sslcrypto_fallback", "libsecp256k1"])
 def crypt_bitcoin_lib(request, monkeypatch):
     monkeypatch.setattr(CryptBitcoin, "lib_verify_best", request.param)
     CryptBitcoin.loadLib(request.param)

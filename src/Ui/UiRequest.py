@@ -112,8 +112,14 @@ class UiRequest(object):
             self_host = self.env["HTTP_HOST"].split(":")[0]
             self_ip = self.env["HTTP_HOST"].replace(self_host, socket.gethostbyname(self_host))
             link = "http://{0}{1}".format(self_ip, http_get)
-            ret_link = """<h4>Access via ip: <a href="{0}">{0}</a>""".format(html.escape(link)).encode("utf8")
-            return iter([ret_error, ret_link])
+            ret_body = """
+                <h4>Start the client with <code>--ui_host "{host}"</code> argument</h4>
+                <h4>or access via ip: <a href="{link}">{link}</a></h4>
+            """.format(
+                host=html.escape(self.env["HTTP_HOST"]),
+                link=html.escape(link)
+            ).encode("utf8")
+            return iter([ret_error, ret_body])
 
         # Prepend .bit host for transparent proxy
         if self.isDomain(self.env.get("HTTP_HOST")):
@@ -293,9 +299,6 @@ class UiRequest(object):
             headers["Access-Control-Allow-Headers"] = "Origin, X-Requested-With, Content-Type, Accept, Cookie, Range"
             headers["Access-Control-Allow-Credentials"] = "true"
 
-        if content_type in ("text/plain", "text/html", "text/css", "application/javascript", "application/json", "application/manifest+json"):
-            content_type += "; charset=utf-8"
-
         # Download instead of display file types that can be dangerous
         if re.findall("/svg|/xml|/x-shockwave-flash|/pdf", content_type):
             headers["Content-Disposition"] = "attachment"
@@ -305,6 +308,9 @@ class UiRequest(object):
             content_type.split("/", 1)[0] in ("image", "video", "font") or
             content_type in ("application/javascript", "text/css")
         )
+
+        if content_type in ("text/plain", "text/html", "text/css", "application/javascript", "application/json", "application/manifest+json"):
+            content_type += "; charset=utf-8"
 
         if status in (200, 206) and cacheable_type:  # Cache Css, Js, Image files for 10min
             headers["Cache-Control"] = "public, max-age=600"  # Cache 10 min
@@ -779,8 +785,9 @@ class UiRequest(object):
             if origin:
                 origin_host = origin.split("://", 1)[-1]
                 if origin_host != host and origin_host not in self.server.allowed_ws_origins:
-                    ws.send(json.dumps({"error": "Invalid origin: %s" % origin}))
-                    return self.error403("Invalid origin: %s" % origin)
+                    error_message = "Invalid origin: %s (host: %s, allowed: %s)" % (origin, host, self.server.allowed_ws_origins)
+                    ws.send(json.dumps({"error": error_message}))
+                    return self.error403(error_message)
 
             # Find site by wrapper_key
             wrapper_key = self.get["wrapper_key"]
@@ -807,7 +814,7 @@ class UiRequest(object):
                     # Remove websocket from every site (admin sites allowed to join other sites event channels)
                     if ui_websocket in site_check.websockets:
                         site_check.websockets.remove(ui_websocket)
-                return "Bye."
+                return [b"Bye."]
             else:  # No site found by wrapper key
                 ws.send(json.dumps({"error": "Wrapper key not found: %s" % wrapper_key}))
                 return self.error403("Wrapper key not found: %s" % wrapper_key)
@@ -906,7 +913,8 @@ class UiRequest(object):
         else:
             return """
                 <style>
-                * { font-family: Consolas, Monospace; color: #333; font-size: 100%%; }
+                * { font-family: Consolas, Monospace; color: #333; }
+                code { font-family: Consolas, Monospace; background-color: #EEE }
                 </style>
                 <h1>%s</h1>
                 <h2>%s</h3>

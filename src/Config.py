@@ -13,7 +13,7 @@ class Config(object):
 
     def __init__(self, argv):
         self.version = "0.7.1"
-        self.rev = 4394
+        self.rev = 4462
         self.argv = argv
         self.action = None
         self.test_parser = None
@@ -32,6 +32,8 @@ class Config(object):
         self.config_file = self.start_dir + "/zeronet.conf"
         self.data_dir = self.start_dir + "/data"
         self.log_dir = self.start_dir + "/log"
+        self.openssl_lib_file = None
+        self.openssl_bin_file = None
 
         self.trackers_file = False
         self.createParser()
@@ -53,7 +55,9 @@ class Config(object):
     def getStartDir(self):
         this_file = os.path.abspath(__file__).replace("\\", "/").rstrip("cd")
 
-        if this_file.endswith("/Contents/Resources/core/src/Config.py"):
+        if "--start_dir" in self.argv:
+            start_dir = self.argv[self.argv.index("--start_dir") + 1]
+        elif this_file.endswith("/Contents/Resources/core/src/Config.py"):
             # Running as ZeroNet.app
             if this_file.startswith("/Application") or this_file.startswith("/private") or this_file.startswith(os.path.expanduser("~/Library")):
                 # Runnig from non-writeable directory, put data to Application Support
@@ -78,9 +82,9 @@ class Config(object):
             "zero://boot3rdez4rzn36x.onion:15441",
             "zero://zero.booth.moe#f36ca555bee6ba216b14d10f38c16f7769ff064e0e37d887603548cc2e64191d:443",  # US/NY
             "udp://tracker.coppersurfer.tk:6969",  # DE
-            "udp://tracker.zum.bi:6969",  # US/NY
             "udp://104.238.198.186:8000",  # US/LA
-            "http://tracker01.loveapp.com:6789/announce",  # Google
+            "udp://retracker.akado-ural.ru:80",  # RU
+            "http://h4.trakx.nibba.trade:80/announce",  # US/VA
             "http://open.acgnxtracker.com:80/announce",  # DE
             "http://tracker.bt4g.com:2095/announce",  # Cloudflare
             "zero://2602:ffc5::c5b2:5360:26312"  # US/ATL
@@ -220,6 +224,7 @@ class Config(object):
 
         self.parser.add_argument('--batch', help="Batch mode (No interactive input for commands)", action='store_true')
 
+        self.parser.add_argument('--start_dir', help='Path of working dir for variable content (data, log, .conf)', default=self.start_dir, metavar="path")
         self.parser.add_argument('--config_file', help='Path of config file', default=config_file, metavar="path")
         self.parser.add_argument('--data_dir', help='Path of data directory', default=data_dir, metavar="path")
 
@@ -267,6 +272,8 @@ class Config(object):
         self.parser.add_argument('--trackers_proxy', help='Force use proxy to connect to trackers (disable, tor, ip:port)', default="disable")
         self.parser.add_argument('--use_libsecp256k1', help='Use Libsecp256k1 liblary for speedup', type='bool', choices=[True, False], default=True)
         self.parser.add_argument('--use_openssl', help='Use OpenSSL liblary for speedup', type='bool', choices=[True, False], default=True)
+        self.parser.add_argument('--openssl_lib_file', help='Path for OpenSSL library file (default: detect)', default=argparse.SUPPRESS, metavar="path")
+        self.parser.add_argument('--openssl_bin_file', help='Path for OpenSSL binary file (default: detect)', default=argparse.SUPPRESS, metavar="path")
         self.parser.add_argument('--disable_db', help='Disable database updating', action='store_true')
         self.parser.add_argument('--disable_encryption', help='Disable connection encryption', action='store_true')
         self.parser.add_argument('--force_encryption', help="Enforce encryption to all peer connections", action='store_true')
@@ -479,8 +486,9 @@ class Config(object):
             for key, val in args.items():
                 if type(val) is list:
                     val = val[:]
-                if key in ("data_dir", "log_dir"):
-                    val = val.replace("\\", "/")
+                if key in ("data_dir", "log_dir", "start_dir", "openssl_bin_file", "openssl_lib_file"):
+                    if val:
+                        val = val.replace("\\", "/")
                 setattr(self, key, val)
 
     def loadPlugins(self):
@@ -638,7 +646,6 @@ class Config(object):
         logging.addLevelName(15, "WARNING")
 
         logging.getLogger('').name = "-"  # Remove root prefix
-        logging.getLogger("geventwebsocket.handler").setLevel(logging.WARNING)  # Don't log ws debug messages
 
         if console_logging:
             self.initConsoleLogger()

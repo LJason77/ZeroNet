@@ -55,7 +55,10 @@ class ThreadPool:
         del self.pool
         self.pool = None
 
-    def __del__(self):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
         self.kill()
 
 
