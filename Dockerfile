@@ -9,7 +9,6 @@ COPY requirements.txt /root/requirements.txt
 RUN apk --no-cache --no-progress add python3 python3-dev gcc libffi-dev musl-dev make openssl tzdata && \
 	cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 	echo "Asia/Shanghai" > /etc/timezone && \
-	pip3 install --upgrade pip && \
 	pip3 install -r /root/requirements.txt && \
 	apk del -qq --purge python3-dev gcc libffi-dev musl-dev make tzdata
 
