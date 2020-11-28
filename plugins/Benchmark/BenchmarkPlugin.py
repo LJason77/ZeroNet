@@ -146,6 +146,7 @@ class ActionsPlugin:
 
         yield "\n"
         res = {}
+        res_time_taken = {}
         multiplers = []
         for test in tests:
             s = time.time()
@@ -182,10 +183,34 @@ class ActionsPlugin:
                 yield self.formatResult(time_taken, time_standard)
                 yield "\n"
                 res[key] = "ok"
+                res_time_taken[key] = time_taken
                 multiplers.append(time_standard / max(time_taken, 0.001))
             except Exception as err:
                 res[key] = err
                 yield "Failed!\n! Error: %s\n\n" % Debug.formatException(err)
+
+        yield "\n== Result ==\n"
+
+        # Check verification speed
+        if "testVerify {'lib_verify': 'sslcrypto'}" in res_time_taken:
+            speed_order = ["sslcrypto_fallback", "sslcrypto", "libsecp256k1"]
+            time_taken = {}
+            for lib_verify in speed_order:
+                time_taken[lib_verify] = res_time_taken["testVerify {'lib_verify': '%s'}" % lib_verify]
+
+            time_taken["sslcrypto_fallback"] *= 10  # fallback benchmark only run 20 times instead of 200
+            speedup_sslcrypto = time_taken["sslcrypto_fallback"] / time_taken["sslcrypto"]
+            speedup_libsecp256k1 = time_taken["sslcrypto_fallback"] / time_taken["libsecp256k1"]
+
+            yield "\n* Verification speedup:\n"
+            yield " - OpenSSL: %.1fx (reference: 7.0x)\n" % speedup_sslcrypto
+            yield " - libsecp256k1: %.1fx (reference: 23.8x)\n" % speedup_libsecp256k1
+
+            if speedup_sslcrypto < 2:
+                res["Verification speed"] = "error: OpenSSL speedup low: %.1fx" % speedup_sslcrypto
+
+            if speedup_libsecp256k1 < speedup_sslcrypto:
+                res["Verification speed"] = "error: libsecp256k1 speedup low: %.1fx" % speedup_libsecp256k1
 
         if not res:
             yield "! No tests found"
@@ -193,18 +218,23 @@ class ActionsPlugin:
                 sys.exit(1)
         else:
             num_failed = len([res_key for res_key, res_val in res.items() if res_val != "ok"])
-            num_success = len([res_key for res_key, res_val in res.items() if res_val != "ok"])
-            yield "* Result:\n"
+            num_success = len([res_key for res_key, res_val in res.items() if res_val == "ok"])
+            yield "\n* Tests:\n"
             yield " - Total: %s tests\n" % len(res)
             yield " - Success: %s tests\n" % num_success
             yield " - Failed: %s tests\n" % num_failed
             if any(multiplers):
                 multipler_avg = sum(multiplers) / len(multiplers)
                 multipler_title = self.getMultiplerTitle(multipler_avg)
-                yield " - Average speed factor: %.2fx (%s)" % (multipler_avg, multipler_title)
-            if num_failed == 0 and config.action == "test":
-                sys.exit(1)
+                yield " - Average speed factor: %.2fx (%s)\n" % (multipler_avg, multipler_title)
 
+            # Display errors
+            for res_key, res_val in res.items():
+                if res_val != "ok":
+                    yield " ! %s %s\n" % (res_key, res_val)
+
+            if num_failed != 0 and config.action == "test":
+                sys.exit(1)
 
     def testHttps(self, num_run=1):
         """
@@ -323,12 +353,13 @@ class ActionsPlugin:
             valid = "G1GXaDauZ8vX/N9Jn+MRiGm9h+I94zUhDnNYFaqMGuOiBHB+kp4cRPZOL7l1yqK5BHa6J+W97bMjvTXtxzljp6w="
             assert sign == valid, "%s != %s" % (sign, valid)
 
-    def testVerify(self, num_run=1, lib_verify="btctools"):
+    def testVerify(self, num_run=1, lib_verify="sslcrypto"):
         """
         Test verification of generated signatures
         """
         from Crypt import CryptBitcoin
         CryptBitcoin.loadLib(lib_verify, silent=True)
+
 
         data = "Hello" * 1024
         privatekey = "5JsunC55XGVqFQj5kPGK4MWgTL26jKbnPhjnmchSNPo75XXCwtk"
@@ -339,6 +370,34 @@ class ActionsPlugin:
             ok = CryptBitcoin.verify(data, address, sign, lib_verify=lib_verify)
             yield "."
             assert ok, "does not verify from %s" % address
+
+        if lib_verify == "sslcrypto":
+            yield("(%s)" % CryptBitcoin.sslcrypto.ecc.get_backend())
+
+    def testPortCheckers(self):
+        """
+        Test all active open port checker
+        """
+        from Peer import PeerPortchecker
+        for ip_type, func_names in PeerPortchecker.PeerPortchecker.checker_functions.items():
+            yield "\n- %s:" % ip_type
+            for func_name in func_names:
+                yield "\n - Tracker %s: " % func_name
+                try:
+                    for res in self.testPortChecker(func_name):
+                        yield res
+                except Exception as err:
+                    yield Debug.formatException(err)
+
+    def testPortChecker(self, func_name):
+        """
+        Test single open port checker
+        """
+        from Peer import PeerPortchecker
+        peer_portchecker = PeerPortchecker.PeerPortchecker(None)
+        announce_func = getattr(peer_portchecker, func_name)
+        res = announce_func(3894)
+        yield res
 
     def testAll(self):
         """
@@ -360,5 +419,10 @@ class ConfigPlugin(object):
             self.test_parser.add_argument(
                 '--filter', help='Filter running benchmark',
                 default=None, metavar='test name'
+            )
+        elif self.getCmdlineValue("test") == "portChecker":
+            self.test_parser.add_argument(
+                '--func_name', help='Name of open port checker function',
+                default=None, metavar='func_name'
             )
         return back

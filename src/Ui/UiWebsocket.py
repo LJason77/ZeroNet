@@ -6,6 +6,7 @@ import shutil
 import re
 import copy
 import logging
+import stat
 
 import gevent
 
@@ -260,10 +261,8 @@ class UiWebsocket(object):
 
         settings = site.settings.copy()
         del settings["wrapper_key"]  # Dont expose wrapper key
-        del settings["auth_key"]  # Dont send auth key twice
 
         ret = {
-            "auth_key": self.site.settings["auth_key"],  # Obsolete, will be removed
             "auth_address": self.user.getAuthAddress(site.address, create=create_user),
             "cert_user_id": self.user.getCertUserId(site.address),
             "address": site.address,
@@ -629,7 +628,7 @@ class UiWebsocket(object):
                 self.site.storage.delete(inner_path)
             except Exception as err:
                 self.log.error("File delete error: %s" % err)
-                return self.response(to, {"error": "Delete error: %s" % err})
+                return self.response(to, {"error": "Delete error: %s" % Debug.formatExceptionMessage(err)})
 
         self.response(to, "ok")
 
@@ -657,9 +656,19 @@ class UiWebsocket(object):
 
     # List directories in a directory
     @flag.async_run
-    def actionDirList(self, to, inner_path):
+    def actionDirList(self, to, inner_path, stats=False):
         try:
-            return list(self.site.storage.list(inner_path))
+            if stats:
+                back = []
+                for file_name in self.site.storage.list(inner_path):
+                    file_stats = os.stat(self.site.storage.getPath(inner_path + "/" + file_name))
+                    is_dir = stat.S_ISDIR(file_stats.st_mode)
+                    back.append(
+                        {"name": file_name, "size": file_stats.st_size, "is_dir": is_dir}
+                    )
+                return back
+            else:
+                return list(self.site.storage.list(inner_path))
         except Exception as err:
             self.log.error("dirList %s error: %s" % (inner_path, Debug.formatException(err)))
             return {"error": Debug.formatExceptionMessage(err)}
@@ -699,7 +708,10 @@ class UiWebsocket(object):
             import base64
             body = base64.b64encode(body).decode()
         else:
-            body = body.decode()
+            try:
+                body = body.decode()
+            except Exception as err:
+                self.response(to, {"error": "Error decoding text: %s" % err})
         self.response(to, body)
 
     @flag.async_run
@@ -1027,10 +1039,12 @@ class UiWebsocket(object):
             else:
                 return {"error": "Invalid address"}
 
-    @flag.admin
     @flag.async_run
     def actionSiteListModifiedFiles(self, to, content_inner_path="content.json"):
-        content = self.site.content_manager.contents[content_inner_path]
+        content = self.site.content_manager.contents.get(content_inner_path)
+        if not content:
+            return {"error": "content file not avaliable"}
+
         min_mtime = content.get("modified", 0)
         site_path = self.site.storage.directory
         modified_files = []
@@ -1112,7 +1126,7 @@ class UiWebsocket(object):
     @flag.admin
     @flag.no_multiuser
     def actionServerErrors(self, to):
-        return self.server.logdb_errors.lines
+        return config.error_logger.lines
 
     @flag.admin
     @flag.no_multiuser

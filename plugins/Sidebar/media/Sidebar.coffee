@@ -219,6 +219,9 @@ class Sidebar extends Class
 					@wrapper.notifications.add "privatekey", "done", "Saved private key removed", 5000
 			return false
 
+		# Use requested address for browse files urls
+		@tag.find("#browse-files").attr("href", document.location.pathname.replace(/(\/.*?(\/|$)).*$/, "/list$1"))
+
 
 
 	animDrag: (e) =>
@@ -441,9 +444,18 @@ class Sidebar extends Class
 
 		# Owned checkbox
 		@tag.find("#checkbox-owned").off("click touchend").on "click touchend", =>
-			@wrapper.ws.cmd "siteSetOwned", [@tag.find("#checkbox-owned").is(":checked")]
+			owned = @tag.find("#checkbox-owned").is(":checked")
+			@wrapper.ws.cmd "siteSetOwned", [owned], (res_set_owned) =>
+				@log "Owned", owned
+				if owned
+					@wrapper.ws.cmd "siteRecoverPrivatekey", [], (res_recover) =>
+						if res_recover == "ok"
+							@wrapper.notifications.add("recover", "done", "Private key recovered from master seed", 5000)
+						else
+							@log "Unable to recover private key: #{res_recover.error}"
 
-		# Owned checkbox
+
+		# Owned auto download checkbox
 		@tag.find("#checkbox-autodownloadoptional").off("click touchend").on "click touchend", =>
 			@wrapper.ws.cmd "siteSetAutodownloadoptional", [@tag.find("#checkbox-autodownloadoptional").is(":checked")]
 

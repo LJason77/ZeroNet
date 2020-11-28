@@ -289,8 +289,10 @@ class FileServer(ConnectionServer):
                     with gevent.Timeout(10, exception=False):
                         site.announcer.announcePex()
 
-                # Retry failed files
-                if site.bad_files:
+                # Last check modification failed
+                if site.content_updated is False:
+                    site.update()
+                elif site.bad_files:
                     site.retryBadFiles()
 
                 if time.time() - site.settings.get("modified", 0) < 60 * 60 * 24 * 7:
@@ -310,7 +312,8 @@ class FileServer(ConnectionServer):
     def announceSite(self, site):
         site.announce(mode="update", pex=False)
         active_site = time.time() - site.settings.get("modified", 0) < 24 * 60 * 60
-        if site.settings["own"] or active_site:  # Check connections more frequently on own and active sites to speed-up first connections
+        if site.settings["own"] or active_site:
+            # Check connections more frequently on own and active sites to speed-up first connections
             site.needConnections(check_site_on_reconnect=True)
         site.sendMyHashfield(3)
         site.updateHashfield(3)
@@ -328,23 +331,36 @@ class FileServer(ConnectionServer):
                 time.sleep(1)
             taken = time.time() - s
 
-            sleep = max(0, 60 * 20 / len(config.trackers) - taken)  # Query all trackers one-by-one in 20 minutes evenly distributed
+            # Query all trackers one-by-one in 20 minutes evenly distributed
+            sleep = max(0, 60 * 20 / len(config.trackers) - taken)
+
             self.log.debug("Site announce tracker done in %.3fs, sleeping for %.3fs..." % (taken, sleep))
             time.sleep(sleep)
 
     # Detects if computer back from wakeup
     def wakeupWatcher(self):
         last_time = time.time()
+        last_my_ips = socket.gethostbyname_ex('')[2]
         while 1:
             time.sleep(30)
-            if time.time() - max(self.last_request, last_time) > 60 * 3:
+            is_time_changed = time.time() - max(self.last_request, last_time) > 60 * 3
+            if is_time_changed:
                 # If taken more than 3 minute then the computer was in sleep mode
                 self.log.info(
-                    "Wakeup detected: time warp from %s to %s (%s sleep seconds), acting like startup..." %
+                    "Wakeup detected: time warp from %0.f to %0.f (%0.f sleep seconds), acting like startup..." %
                     (last_time, time.time(), time.time() - last_time)
                 )
+
+            my_ips = socket.gethostbyname_ex('')[2]
+            is_ip_changed = my_ips != last_my_ips
+            if is_ip_changed:
+                self.log.info("IP change detected from %s to %s" % (last_my_ips, my_ips))
+
+            if is_time_changed or is_ip_changed:
                 self.checkSites(check_files=False, force_port_check=True)
+
             last_time = time.time()
+            last_my_ips = my_ips
 
     # Bind and start serving sites
     def start(self, check_sites=True):
@@ -357,10 +373,6 @@ class FileServer(ConnectionServer):
             self.stream_server.start()
         except Exception as err:
             self.log.error("Error listening on: %s:%s: %s" % (self.ip, self.port, err))
-            if "ui_server" in dir(sys.modules["main"]):
-                self.log.debug("Stopping UI Server.")
-                sys.modules["main"].ui_server.stop()
-                return False
 
         self.sites = self.site_manager.list()
         if config.debug:
