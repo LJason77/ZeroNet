@@ -1,17 +1,19 @@
 FROM alpine:latest
 
 #Base settings
-ENV HOME /root
+ENV HOME /root \
+	ENABLE_TOR false
 
 COPY requirements.txt /root/requirements.txt
 
 #Install ZeroNet
-RUN apk --no-cache --no-progress add python3 python3-dev py3-pip gcc libffi-dev musl-dev make openssl tzdata && \
+RUN apk -q --no-cache add python3 py3-pip openssl && \
+	apk -q --no-cache add --virtual .build-deps python3-dev build-base libffi-dev musl-dev tzdata autoconf automake libtool && \
 	cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 	echo "Asia/Shanghai" > /etc/timezone && \
 	pip3 install --no-cache-dir wheel && \
 	pip3 install --no-cache-dir -r /root/requirements.txt && \
-	apk del -qq --purge python3-dev gcc libffi-dev musl-dev make tzdata
+	apk del -qq --purge .build-deps
 
 #Add Zeronet source
 COPY . /root
